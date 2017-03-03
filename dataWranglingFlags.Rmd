@@ -1,0 +1,287 @@
+---
+title:  <center> <h1> Manipulação de Dados em R (dplyr,tidyr) </h1> </center>
+author: <center>Kássio Ferreira</center>
+output: html_document
+---
+
+<style type="text/css">
+
+body, td {
+   font-size: 14px;
+}
+code.r{
+  font-size: 10px;
+}
+pre {
+  font-size: 10px
+}
+
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introdução 
+
+O objetivo deste rápido tutorial é introduzir algumas funções dos pacotes **dplyr** e **tidyr** úteis para 
+manipulação de conjuntos de dados em R. Esta é uma tarefa essencial, uma vez que os dados nem sempre
+chegam ao pesquisador num formato que permita a aplicação direta dos recursos do computacionais. 
+Portanto, colocar os dados em formato adequado muitas vezes pode ser tão importante quanto (e até mais 
+trabalhoso) do que a análise em si.
+
+O pacotes [**dplyr**](https://cran.r-project.org/web/packages/dplyr/index.html) e 
+[**tidyr**](https://cran.r-project.org/web/packages/tidyr/index.html) possuem uma 
+gama de funções que permitem remoldar os dados com apenas alguns comandos. Utilizaremos 
+o conjuntos de dados **flags** ([ver documentação](https://archive.ics.uci.edu/ml/machine-learning-databases/flags/flag.data))
+para fornecer uma abordagem prática para os principais comandos de _dplyr_ e _tidyr_.
+
+## Dados
+
+Primeiramente vamos baixar os dados diretamente da web. O banco de dados _flags_ constitui-se
+numa lista de 194 países com 30 atributos sobre sua geografia (área, população) e suas bandeiras (presença de cores,
+faixas, estrelas, etc.)
+
+OBS: como nos dados originais não há um cabeçalho com os nomes das variáveis, foi necessário 
+adicionar manualmente.
+```{r flags}
+# data wrangling tutorial:
+library(plyr)
+suppressPackageStartupMessages(library(dplyr))
+library(tidyr)
+library(microbenchmark)
+
+# packages plyr, dplyr, tidyr
+
+flags <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/flags/flag.data", sep=",")
+
+atributos <- c("name", "landmass", "zone", "area", "population", "language", "religion", "bars", "stripes", "colours",
+               "red", "green", "blue", "gold", "white", "black", "orange", "mainhue", "circles", "crosses", "saltires",
+               "quarters", "sunstars", "crescent", "triangle", "icon", "animate", "text", "topleft", "botright")
+
+colnames(flags) <- atributos
+fullData = flags
+# temos o data frame, agora vamos seguir os passos do cheatsheet
+```
+
+Por enquanto, a variável flags é um dataframe. Para o uso do pacote _dplyr_ é conveniente converter os
+dados para outra estrutura chamada _tbl_. Em seguida, a função _distinct()_ permite remover linhas repetidas.
+
+```{r flags 1.0}
+# transformar os dados para a classe tbl:
+flags <- tbl_df(flags)
+distinct(flags)
+```
+
+Note que a observação relativa à Argentina é repetida, mas a função _distinct()_ não removeu a linha, já 
+que na linha repetida consta "Argentine", portanto, as duas linhas não seriam iguais. O comando abaixo resolve
+este problema:
+```{r flags1.1, eval = FALSE}
+# removendo a linha repetida "Argentine"
+for(i in 1:nrow(flags)){
+  if(flags[i,1] == "Argentine")
+    flags <- flags[-i, ]
+}
+
+```
+
+Como o objetivo aqui é mostrar como trabalhar com o pacote, selecionaremos uma parte dos dados
+selecionar aleatoriamente uma parte dos dados. Isto pode ser feito de duas maneiras, a saber, 
+selecionando uma porcentagem dos dados, utilizando a função _sample_frac()_ ou um 
+número determinado, utilizando a função _sample_n()_. 
+
+Por exemplo, para selecionar aleatoriamente 80% dos objetos com _sample_frac()_, temos:
+```{r flags2}
+sample_frac(flags, 0.8, replace=FALSE)   
+```
+
+Vamos escolher aleatoriamente 5 países para que seja possível visualizar as saídas das funções. 
+Em seguida, usamos o comando _glimpse()_, que permite visualizar os dados com os atributos como linhas
+e os objetos como colunas. A tabela apresenta 3 variáveis para facilitar a visualização:
+```{r flags3}
+# selecionar aleatoriamente um número de linhas dos dados
+flags = sample_n(flags, 5, replace=FALSE)
+glimpse(flags)
+
+```
+
+``` {r flags3.1, results='asis'}
+library(knitr)
+flags %>% select(.,name,area,population) %>% kable(.,caption="Seleção aleatória de 5 observações")
+```
+
+## Formatando os dados 
+
+A função _gather()_ pertence ao pacote _tidyr_ converte as colunas de dados para o formato chave/valor.
+Os atributos desejados são colocados na coluna "key" e seus respectivos valores na coluna "value".
+Note que fazemos uso, pela primeira vez, do operador %>%, que torna o código em 
+R mais legível. Por exemplo, a notação usual equivalente ao primeiro comando abaixo
+seria 
+
+``` {r gather, eval=FALSE}
+gather(flags,key="key", value = "value", -name)
+```
+
+Por meio deste comando, convertemos os dados para a notação chave/valor,
+onde as chaves são todas as variáveis, exceto o nome dos países.
+
+``` {r flags4}
+gathered_data = flags %>% gather(., key="key", value = "value", -name)
+gathered_data
+```
+
+A função spread, do pacote _tidyr_, pega as chaves e as transforma em atributos - como tínhamos anteriormente.
+Então, as funções spread e gather são complementares. Uma desfaz o que a outra faz.
+
+``` {r flags5}
+gathered_data %>% spread(., key, value)
+```
+
+Para ordenar as observações de acordo com os valores de um atributo, use 
+a função _arrange()_.
+Por exemplo, vamos ordenar os países de acordo com a área, do maior para o 
+menor...
+
+```{r flags6}
+flags %>% arrange(., desc(area))
+```
+
+...e do menor para o maior:
+``` {r flags7}
+#(do menor para o maior)
+flags %>% arrange(., area)
+```
+
+Podemos selecionar observações de acordo com um critério lógico usando a função _filter()_.
+No exemplo, selecionamos apenas os países com população maior que 40 milhões e/ou área maior que 
+200.
+
+``` {r flags8}
+# função filter
+flags %>% filter(., population > 20, area>50)
+flags %>% filter(., population > 20 | area>50)
+```
+
+No entanto, há uma contraindicação ao uso da função _filter()_:
+a função _subset()_ cumpre o mesmo papel de modo muito mais eficiente, 
+como pode ser visto nos testes de desempenho abaixo:
+
+```{r flags9}
+# note que a função subset é bem mais rápida:
+
+microbenchmark(filter(flags, population > 20 | area>50), 
+               subset(flags, population>20 | area>50))
+
+microbenchmark(filter(flags, population >20,area>50), 
+               subset(flags, population>20,area>50)) 
+```
+
+Para obter medidas-resumo das variáveis (mínimo, máximo, média, mediana, variância e desvio padrão), 
+utilizam-se as funções _summarise\_each()_ (para todas as variáveis)  e _summarise()_ 
+(para variáveis selecionadas).
+
+Note que, quando aplicada para todas as colunas, o comando _summarise\_each(..., funs(mean))_ retorna
+algumas advertências: elas referem-se ao fato de que não podemos calcular a média para fatores.
+No caso das variáveis booleanas, a média expressará a proporção de casos positivos, por exemplo, 
+a proporção de países que têm azul em sua bandeira.
+
+```{r flags10}
+## Summarise data
+flags %>% summarise_each(., funs(mean))
+```
+```{r flags10.1, results="asis"}
+flags %>% summarise(., meanArea = mean(area), meanPop = max(population),meanBlack = mean(black), 
+                    meanBlue = mean(blue), meanGold = mean(gold))  %>% kable(.,align='l')
+```
+
+Ás vezes pode ser interessante agrupar observações por fatores de uma variável.
+Por exemplo, podemos agrupar os países de acordo com a divisão geográfica a qual pertencem.
+A função _ddply()_ cumpre esta função. 
+No exemplo abaixo, agrupamos os países de acordo com o continente e com a religião dominante.
+
+OBS: nos dados utilizados aqui, América Central e do Norte foram agrupadas em um só continente.
+
+``` {r flags11}
+# ddply function (agupar segundo alguma variável)
+
+flags %>% ddply(., .(landmass)) 
+flags %>% ddply(., .(religion))
+
+```
+
+## Criando novas variáveis
+
+Vamos supor que tenhamos interesse em saber quais os países que possuem verde+amarelo 
+ou vermelho+branco sua bandeira. Podemos utilizar a função _mutate()_, que cria uma nova variável 
+de acordo com operações sobre as variáveis existentes.
+
+Criamos a função _pairsVec()_ indicadora da presença de duas cores: a função recebe 
+dois vetores booleanos (1 - TRUE e 0 - FALSE) e retorna outro vetor booleano em que 
+1 indica (TRUE, TRUE) e 0 indica os outros casos. Ou seja, quando temos as duas cores presentes
+na bandeira do i-ésimo país, o vetor resultante terá 1 na posição i.
+
+Utilizamos _pairsVec()_ como um dos argumentos da função _mutate()_ para gerar duas novas variáveis:
+goldGrenn (indica se há amarelo e verde na bandeira) e redWhite (se há vermelho e branco na bandeira).
+Em seguida, utilizamos a função _select()_ para imprimir apenas os nomes dos países e as variáveis 
+recém criadas.
+
+``` {r flags12, results = "asis"}
+pairsVec = function(x,y){
+  res = NULL;
+  for(i in 1:length(x)){
+    if(x[i] == 1 && y[i] == 1)
+      res[i] <- 1
+    else
+      res[i] <- 0
+  }
+  res
+}
+
+mutate(flags, goldGrenn = pairsVec(gold, green), redWhite = pairsVec(red, white)) %>% select(.,name,goldGrenn:redWhite) %>% kable(.,align='l')
+```
+
+Caso haja interesse em aplicar uma função a todas as colunas, utiliza-se a função _mutate\_each()_.
+No exemplo, aplicamos a média acumulada a cada uma das variáveis.
+
+```{r flags13}
+# aplicar uma função "janela" para cada uma das variáveis (atributos)
+mutate_each(flags, funs(cummean))
+```
+
+Combinando as funções _ddply()_ e _mutate()_, podemos criar variáveis
+por grupos definidos anteriormente. 
+Podemos, por exemplo, saber a porcentagem de países que possuem verde e 
+amarelo na bandeira fazendo a média por grupos de modo bastante sintético.
+O próximo comando foi feito para todo com conjunto de dados (variável _fullData()_):
+
+```{r flags14, results="asis"}
+fullData %>% mutate(., goldGrenn = pairsVec(gold, green)) %>% ddply(., ~landmass, summarise, rate = mean(goldGrenn)) %>% kable(.,align='l')
+```
+
+O pacote _dplyr_ também oferece recursos para particionar/agregar dados.
+Isto é feito por meio das funções _select()_ e _slice()_. A primeira seleciona 
+variáveis, enquanto a segunda seleciona observações.
+
+Exemplo: selecionar as variáveis entre "name" e "language" (inclusive) 
+e as 3 primeiras observações.
+Note que a função _bind\_rows()_ une as linhas de f1 e f2, formando o mesmo conjunto de
+dados original, como pode ser confirmado pela função _setequal()_
+``` {r flags15}
+# selecionar as variáveis entre "name" e "language" (inclusive) e as 10 primeiras observações
+f1 = flags %>% slice(., 1:3)
+f2 = flags  %>% slice(., 4:5)
+```
+
+Note que a função _bind\_rows()_ une as linhas de f1 e f2, formando o mesmo conjunto de
+dados original, como pode ser confirmado pela função _setequal()_
+```{r flags16}
+# agora vamos juntar os dois:
+setequal(bind_rows(f1,f2), flags)
+```
+
+## Conclusão
+
+Estes são alguns dos comandos do pacote _dplyr_. Este tutorial não é exaustivo, apenas pretende
+motivar o uso do pacote como uma boa solução para manipulação de conjuntos de dados.
+Há muita documentação na internet sobre o pacote, incluindo [resumos rápidos](https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf).
+
